@@ -226,3 +226,4 @@ class DatabaseService:
         # Sort by final_score descending
         results.sort(key=lambda x: x.get("ranking", {}).get("final_score", 0), reverse=True)
         return results
+
