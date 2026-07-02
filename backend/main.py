@@ -43,6 +43,17 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+from fastapi.middleware.cors import CORSMiddleware
+
+# Configure CORS for the frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins for development
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
 # ========================================================
 # REQUEST / RESPONSE MODELS
 # ========================================================
@@ -112,6 +123,33 @@ async def create_job(
     return {"success": True, "job_id": job_id}
 
 
+@app.get(
+    f"{settings.API_V1_STR}/jobs",
+    response_model=List[Job],
+    status_code=status.HTTP_200_OK,
+    tags=["Jobs Management"]
+)
+async def get_jobs():
+    """
+    Manager/HR endpoint to fetch all active job descriptions.
+    """
+    jobs = await db_service.get_jobs()
+    return jobs
+
+
+@app.get(
+    f"{settings.API_V1_STR}/jobs/{{job_id}}/candidates",
+    status_code=status.HTTP_200_OK,
+    tags=["Jobs Management"]
+)
+async def get_job_candidates(job_id: str):
+    """
+    Manager/HR endpoint to fetch the ranked leaderboard of candidates for a specific job.
+    """
+    candidates = await db_service.get_candidates_for_job(job_id)
+    return {"job_id": job_id, "leaderboard": candidates}
+
+
 @app.post(
     f"{settings.API_V1_STR}/recruitment/evaluate",
     response_model=EvaluationResponse,
@@ -119,20 +157,27 @@ async def create_job(
     tags=["Recruitment Workflow"]
 )
 async def evaluate_candidate(
-    job_id: str = Form(..., description="Target Job posting identifier."),
+    job_id: Optional[str] = Form(None, description="Target Job posting identifier."),
+    custom_job_description: Optional[str] = Form(None, description="Playground mode: custom job description text."),
     candidate_id: Optional[str] = Form(None, description="Optional Candidate ID if pre-existing in database."),
     file: UploadFile = File(..., description="Candidate resume file (PDF)."),
     current_user: str = Depends(get_current_user)
 ):
     """
-    Starts the full LangGraph recruitment workflow:
-    Supervisor -> Resume Parser -> URL Extraction -> Tools Verification -> Parallel Evaluators -> Consensus.
+    Starts the full LangGraph recruitment workflow.
+    If custom_job_description is provided instead of job_id, runs in Playground mode (no DB saves).
     """
-    logger.info(f"Starting evaluation workflow for job_id: {job_id}")
+    logger.info(f"Starting evaluation workflow for job_id: {job_id} or custom JD")
     
-    # Fetch job from database to get job description
-    job = await db_service.get_job(job_id)
-    job_description = job.job_description if job else f"Could not find job description for ID: {job_id}"
+    # Fetch job from database or use custom
+    if job_id:
+        job = await db_service.get_job(job_id)
+        job_description = job.job_description if job else f"Could not find job description for ID: {job_id}"
+    elif custom_job_description:
+        job = Job(title="Custom Role (Playground)", job_description=custom_job_description, required_skills=[], preferred_skills=[], experience_required_years=0)
+        job_description = custom_job_description
+    else:
+        raise HTTPException(status_code=400, detail="Must provide either job_id or custom_job_description.")
     
     # Save file to temp location
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
@@ -176,9 +221,9 @@ async def evaluate_candidate(
         # Run graph workflow asynchronously
         result_state = await app_graph.ainvoke(initial_state)
         
-        # Save candidate profile to MongoDB to generate/retrieve a valid candidate_id
+        # Save candidate profile to MongoDB to generate/retrieve a valid candidate_id (ONLY if job_id is provided)
         candidate = result_state.get("candidate")
-        if candidate:
+        if candidate and job_id:
             candidate.evaluations = {
                 "technical": result_state.get("technical_evaluation").model_dump() if result_state.get("technical_evaluation") else None,
                 "verification": result_state.get("verification_evaluation").model_dump() if result_state.get("verification_evaluation") else None,
@@ -188,8 +233,8 @@ async def evaluate_candidate(
             result_state["candidate_id"] = saved_id
             candidate.id = saved_id
             
-        # Save evaluation ranking to MongoDB in background or synchronously
-        if result_state.get("ranking") and result_state.get("candidate_id"):
+        # Save evaluation ranking to MongoDB in background or synchronously (ONLY if job_id is provided)
+        if result_state.get("ranking") and result_state.get("candidate_id") and job_id:
             await db_service.save_ranking(
                 candidate_id=result_state["candidate_id"],
                 job_id=job_id,

@@ -98,7 +98,7 @@ class DatabaseService:
 
     async def get_job(self, job_id: str) -> Optional[Job]:
         """
-        Fetch a job description by its unique ID.
+        Fetch a job description by ID.
         """
         logger.debug(f"Fetching job {job_id}")
         if self.db is not None:
@@ -111,6 +111,22 @@ class DatabaseService:
             except Exception as e:
                 logger.error(f"Error fetching job {job_id}: {e}")
         return None
+
+    async def get_jobs(self) -> List[Job]:
+        """
+        Fetch all job records.
+        """
+        logger.debug("Fetching all jobs")
+        jobs = []
+        if self.db is not None:
+            try:
+                cursor = self.db.jobs.find({})
+                async for doc in cursor:
+                    doc["id"] = str(doc["_id"])
+                    jobs.append(Job(**doc))
+            except Exception as e:
+                logger.error(f"Error fetching jobs: {e}")
+        return jobs
 
     async def save_job(self, job: Job) -> str:
         """
@@ -185,3 +201,28 @@ class DatabaseService:
             except Exception as e:
                 logger.error(f"Error fetching ranking: {e}")
         return None
+
+    async def get_candidates_for_job(self, job_id: str) -> List[Dict[str, Any]]:
+        """
+        Fetch all rankings for a given job and join with candidate info.
+        """
+        logger.debug(f"Fetching candidates for job {job_id}")
+        results = []
+        if self.db is not None:
+            try:
+                cursor = self.db.rankings.find({"job_id": job_id})
+                async for ranking_doc in cursor:
+                    candidate_id = ranking_doc.get("candidate_id")
+                    if candidate_id:
+                        candidate_doc = await self.db.candidates.find_one({"_id": ObjectId(candidate_id) if ObjectId.is_valid(candidate_id) else candidate_id})
+                        if candidate_doc:
+                            candidate_doc["id"] = str(candidate_doc["_id"])
+                            results.append({
+                                "candidate": Candidate(**candidate_doc).model_dump(mode='json'),
+                                "ranking": ranking_doc.get("ranking", {})
+                            })
+            except Exception as e:
+                logger.error(f"Error fetching candidates for job {job_id}: {e}")
+        # Sort by final_score descending
+        results.sort(key=lambda x: x.get("ranking", {}).get("final_score", 0), reverse=True)
+        return results
