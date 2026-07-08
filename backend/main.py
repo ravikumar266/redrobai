@@ -10,7 +10,7 @@ from backend.config import settings
 from backend.services.database import DatabaseService
 from backend.graph import app_graph
 from backend.models import Candidate, Ranking, Job
-from backend.security import get_current_user
+from backend.security import get_current_user, get_current_hr_user
 from backend.tools.pdf import PDFTool
 
 # Configure logging
@@ -101,10 +101,21 @@ from backend.security import create_access_token
 @app.post("/token", tags=["Authentication"])
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     """
-    Generate a JWT token for testing. (Accepts any username/password).
+    Generate a JWT token with role based on hardcoded rules.
     """
-    access_token = create_access_token(data={"sub": form_data.username})
-    return {"access_token": access_token, "token_type": "bearer"}
+    if form_data.username in ["hr", "manager"] and form_data.password == "manager":
+        role = "hr"
+    elif form_data.username == "user":
+        role = "candidate"
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
+    access_token = create_access_token(data={"sub": form_data.username, "role": role})
+    return {"access_token": access_token, "token_type": "bearer", "role": role}
 
 
 @app.post(
@@ -114,7 +125,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 )
 async def create_job(
     job: Job,
-    current_user: str = Depends(get_current_user)
+    current_user: dict = Depends(get_current_hr_user)
 ):
     """
     Manager/HR endpoint to create a job description.
@@ -129,7 +140,7 @@ async def create_job(
     status_code=status.HTTP_200_OK,
     tags=["Jobs Management"]
 )
-async def get_jobs():
+async def get_jobs(current_user: dict = Depends(get_current_hr_user)):
     """
     Manager/HR endpoint to fetch all active job descriptions.
     """
@@ -142,7 +153,7 @@ async def get_jobs():
     status_code=status.HTTP_200_OK,
     tags=["Jobs Management"]
 )
-async def get_job_candidates(job_id: str):
+async def get_job_candidates(job_id: str, current_user: dict = Depends(get_current_hr_user)):
     """
     Manager/HR endpoint to fetch the ranked leaderboard of candidates for a specific job.
     """
@@ -263,7 +274,7 @@ async def evaluate_candidate(
 )
 async def recruiter_chat(
     payload: ChatRequest,
-    current_user: str = Depends(get_current_user)
+    current_user: dict = Depends(get_current_hr_user)
 ):
     """
     Handles recruiter Q&A on top of candidate audit outcomes.
@@ -320,7 +331,7 @@ async def recruiter_chat(
         if updated_history and updated_history[-1]["role"] == "assistant":
             assistant_reply = updated_history[-1]["content"]
         else:
-            assistant_reply = "Based on Jane Doe's verified systems engineering portfolio and AWS certifications, she possesses strong technical depth in Rust and distributed systems."
+            assistant_reply = "Sorry, I couldn't process that properly."
             updated_history.append({"role": "assistant", "content": assistant_reply})
             
         return ChatResponse(

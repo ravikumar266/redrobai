@@ -444,17 +444,21 @@ async def recruiter_chat_node(state: GraphState) -> Dict[str, Any]:
     name = candidate.name if candidate else "the candidate"
     skills = ", ".join(candidate.skills) if candidate and candidate.skills else "their skills"
     
+    # Trim history to the last 10 messages to prevent token limits
+    full_history = state.get("chat_history") or []
+    trimmed_history = full_history[-10:] if len(full_history) > 10 else full_history
+    
     context = (
         f"Candidate Profile: {candidate.model_dump() if candidate else None}\n"
         f"Evaluations: Tech: {state.get('technical_evaluation')}, "
         f"Verification: {state.get('verification_evaluation')}, "
         f"Match: {state.get('job_match_evaluation')}\n"
         f"Consensus Ranking: {state.get('ranking')}\n"
-        f"Chat History: {state.get('chat_history')}"
+        f"Chat History (Trimmed to last 10 messages): {trimmed_history}"
     )
     
     from backend.models import AgentAction
-    from backend.tools.email import EmailTool
+    from backend.tools import EmailTool, WebsiteTool, GitHubTool
     
     prompt = f"""{RECRUITER_CHAT_PROMPT}
 
@@ -464,26 +468,43 @@ Context:
 You have access to the following tools:
 1. 'EmailTool': Use this to send an email to the candidate (e.g. to schedule an interview or ask for more info). 
    Arguments required: "to_email", "subject", "body".
+2. 'WebsiteTool': Use this to read a specific webpage or URL to gather extra context.
+   Arguments required: "url".
+3. 'GitHubTool': Use this to fetch repository statistics and details for a GitHub user.
+   Arguments required: "username".
 
-If the user asks you to email the candidate, output a JSON with tool_name="EmailTool" and the required tool_args. 
+If the user asks you to take an action that requires a tool, output a JSON with the corresponding tool_name and the required tool_args. 
 Otherwise, just output your conversational response in the 'reply' field.
 """
     
-    updated_history = list(state.get("chat_history") or [])
+    updated_history = list(full_history)
     
     try:
         action = await LLMService.generate_structured(prompt, response_model=AgentAction)
+        tool_args = action.tool_args or {}
+        
         if action.tool_name == "EmailTool":
             tool = EmailTool()
-            tool_args = action.tool_args or {}
             logger.info(f"Agent decided to use EmailTool with args: {tool_args}")
-            
             result = await tool.run(
                 to_email=tool_args.get("to_email", candidate.email if candidate else ""),
                 subject=tool_args.get("subject", "Follow up regarding your application"),
                 body=tool_args.get("body", "Hello, we would like to schedule an interview.")
             )
-            reply = f"I have used the EmailTool. Status: {result.get('sent_status')}. Message: {result.get('message')}"
+            reply = f"I have sent the email. Status: {result.get('sent_status')}. Message: {result.get('message')}"
+            
+        elif action.tool_name == "WebsiteTool":
+            tool = WebsiteTool()
+            logger.info(f"Agent decided to use WebsiteTool with args: {tool_args}")
+            result = await tool.run(url=tool_args.get("url", ""))
+            reply = f"I fetched the webpage content. Title: {result.get('title')}. Summary/Preview: {result.get('content', '')[:300]}"
+            
+        elif action.tool_name == "GitHubTool":
+            tool = GitHubTool()
+            logger.info(f"Agent decided to use GitHubTool with args: {tool_args}")
+            result = await tool.run(username=tool_args.get("username", ""))
+            reply = f"I fetched the GitHub stats. User: {result.get('username')}, Repos: {result.get('public_repos')}, Stars: {result.get('stars_count')}."
+            
         else:
             reply = action.reply or "I couldn't process that request properly."
             
