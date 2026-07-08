@@ -12,6 +12,7 @@ The application is designed for two distinct types of users, offering a seamless
 1. **HR / Hiring Manager (Recruiter View)**:
    - **Dashboard**: Managers can log in to view active job postings and manage the candidate pipeline.
    - **Create Jobs**: Managers can create detailed job descriptions specifying required skills, experience, and job requirements.
+   ## for HR Login use name manager and password as manager###
    - **Evaluate Candidates**: Review deep AI-generated evaluations of candidates, combining resume parses with external validations (like checking GitHub activity or portfolios).
    - **AI Chat Assistant**: Directly interact with a specialized AI agent to drill down into a candidate's profile or take immediate actions.
 
