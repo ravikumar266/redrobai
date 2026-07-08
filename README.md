@@ -4,6 +4,29 @@ An advanced AI-driven recruitment agentic workflow system built on **FastAPI**, 
 
 ---
 
+## ✨ Key Features & User Roles
+
+### 👥 Dual User Roles
+The application is designed for two distinct types of users, offering a seamless experience tailored to their needs:
+
+1. **HR / Hiring Manager (Recruiter View)**:
+   - **Dashboard**: Managers can log in to view active job postings and manage the candidate pipeline.
+   - **Create Jobs**: Managers can create detailed job descriptions specifying required skills, experience, and job requirements.
+   - **Evaluate Candidates**: Review deep AI-generated evaluations of candidates, combining resume parses with external validations (like checking GitHub activity or portfolios).
+   - **AI Chat Assistant**: Directly interact with a specialized AI agent to drill down into a candidate's profile or take immediate actions.
+
+2. **Candidate (Applicant View)**:
+   - **Apply for Jobs**: Candidates can browse open positions and apply.
+   - **Resume Upload & Parsing**: Candidates can upload their resumes (PDF format). The system automatically parses these to extract skills, work history, and external links for background verification.
+
+### 💬 Intelligent Recruiter Chat (ReAct Agent)
+The recruiter chat feature goes beyond a simple Q&A bot—it functions as a LangGraph-powered **ReAct (Reasoning + Acting) Agent**:
+- **Context Awareness**: It understands which candidate and job you are currently reviewing by fetching the latest evaluation results and background checks from MongoDB on the fly.
+- **Action Execution (Tools)**: Armed with the `EmailTool` (Gmail API integration), the agent can autonomously draft and send emails to candidates directly from the chat interface—perfect for instantly scheduling an interview or sending status updates!
+- **Decision Support**: It assists recruiters by quickly summarizing dense technical evaluations, comparing candidate skills directly against job prerequisites, and highlighting any "red flags" discovered during the verification phase.
+
+---
+
 ## 🏗️ Architecture & LangGraph Workflow
 
 The project uses a centralized **Orchestrator/Supervisor** pattern using LangGraph. The `supervisor` node inspects the execution state and routes the candidate through specialized agent nodes.

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Send, Bot, User, Loader2 } from 'lucide-react';
+import { ArrowLeft, Send, Bot, User, Loader2, Trash2 } from 'lucide-react';
 import api from '../../lib/api';
 
 export default function AgentChat() {
@@ -54,10 +54,22 @@ export default function AgentChat() {
       
       <div className="glass-card flex-grow flex flex-col overflow-hidden">
         <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex flex-col">
-          <h2 className="text-lg font-semibold flex items-center">
-            <Bot className="w-5 h-5 mr-2 text-brand-400" />
-            AI Recruiter Agent
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold flex items-center">
+              <Bot className="w-5 h-5 mr-2 text-brand-400" />
+              AI Recruiter Agent
+            </h2>
+            {messages.length > 0 && (
+              <button 
+                onClick={() => setMessages([])} 
+                className="text-sm flex items-center px-3 py-1.5 rounded-lg bg-zinc-800/50 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors border border-transparent hover:border-red-500/20"
+                title="Clear Chat History"
+              >
+                <Trash2 className="w-4 h-4 mr-1.5" />
+                Clear
+              </button>
+            )}
+          </div>
           <p className="text-xs text-zinc-500">Ask me anything about this candidate's resume, evaluation, or verification.</p>
         </div>
 
