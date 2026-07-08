@@ -21,6 +21,8 @@ api.interceptors.request.use(async (config) => {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
+});
+
 // Add response interceptor to handle 401/403
 api.interceptors.response.use(
   (response) => response,
